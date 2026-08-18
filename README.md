@@ -2,12 +2,13 @@
 
 Prototipo web para la recepción de tela por lector de código de barras.
 Este archivo es **estático** (no tiene servidor propio) — todo corre en el
-navegador, y los datos del histórico están incrustados dentro del mismo
-`index.html`.
+navegador. Trae datos de ejemplo incrustados, pero ahora **cualquiera que lo
+abra puede actualizar esos datos adjuntando el Excel directamente**, sin
+pedírselo a nadie.
 
 ## Cómo publicarlo en GitHub Pages (paso a paso, sin terminal)
 
-1. Entra a [github.com](https://github.com) e inicia sesión (o crea una cuenta gratis).
+1. Entra a github.com e inicia sesión (o crea una cuenta gratis).
 2. Arriba a la derecha, clic en el **+** → **New repository**.
 3. Ponle un nombre, por ejemplo `recepcion-tela-ura`. Puede ser **privado**
    (recomendado, ya que trae datos internos de URA) o público — tú decides.
@@ -28,21 +29,33 @@ navegador, y los datos del histórico están incrustados dentro del mismo
 > público, o usa un servicio alterno como Netlify/Vercel (arrastras el mismo
 > `index.html` y listo, sin necesidad de cuenta de GitHub).
 
-## Cosas importantes que debes saber antes de compartir el link
+## Cómo actualizar los datos (nuevo — ya no depende de Claude)
 
-- **Los datos quedan "congelados" el día que subas el archivo.** Este
-  `index.html` no se conecta en vivo a tu Excel de OneDrive — trae los datos
-  de la última vez que actualizamos el prototipo (hoy, hasta el 06/08/2026).
-  Para traer fechas nuevas, tienes que repetir este mismo proceso: pídeme el
-  archivo actualizado, y vuelves a subir el `index.html` nuevo a GitHub
-  (Add file → Upload files, reemplaza el anterior).
+En la pantalla "Nueva recepción" hay un cuadro **"Actualizar datos desde
+Excel"**. Cualquiera que use la página puede:
+
+1. Descargar/exportar el Excel del histórico desde OneDrive (hoja llamada
+   "Historico" o "Historico RIT").
+2. Adjuntarlo ahí mismo con el botón de subir archivo.
+3. La página lee el archivo **dentro del propio navegador** (usando la
+   librería SheetJS que ya viene incluida) — el archivo nunca sale de tu
+   computador ni pasa por ningún servidor externo.
+4. En segundos aparecen las fechas nuevas en el selector, listas para usar.
+
+Esto reemplaza el proceso anterior de "súbeme el Excel al chat y te regenero
+el archivo" — ahora cada persona puede refrescar los datos ella misma, cuantas
+veces quiera, directamente desde la página publicada en GitHub.
+
+**Limitación que sigue existiendo:** esto sigue siendo "cada quien actualiza
+su propia copia abierta en su navegador" — si tú subes un Excel nuevo en tu
+computador, tu compañero en el suyo no lo ve automáticamente; cada quien debe
+adjuntar el archivo en su propia sesión. Eso —que todos vean lo mismo sin que
+nadie tenga que adjuntar nada— sigue siendo lo que resuelve la conexión real
+con SharePoint que dejamos pendiente.
+
+## Qué NO cambia
+
 - **El historial de recepciones cerradas vive en el navegador de cada
-  persona**, no en GitHub ni en la nube — si dos personas abren el mismo link
-  desde dos computadores distintos, cada quien ve su propio historial, no el
-  del otro. Esto es igual a como funciona hoy, GitHub solo cambia *dónde* se
-  aloja el archivo, no *cómo* funciona por dentro.
+  persona**, no en GitHub ni en la nube — sigue sin compartirse entre equipos.
 - Este sigue siendo el mismo prototipo de siempre — GitHub Pages es solo una
   forma más cómoda de compartir el link en vez de mandar el archivo por chat.
-  La conexión en tiempo real con SharePoint (que dejamos pendiente) sigue
-  siendo el cambio que de verdad resuelve lo de "datos siempre actualizados"
-  y "todos ven lo mismo".
