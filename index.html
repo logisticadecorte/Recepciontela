@@ -76,6 +76,8 @@
   .reset-confirm-text{font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.4;}
   .reset-confirm-actions{display:flex;gap:10px;}
   .reset-confirm-actions .btn{flex:1;}
+  .carro-fuera-tag{color:var(--warn);font-size:11px;margin-left:4px;}
+  .modal-subheading{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin:16px 0 10px 0;}
 
 
   .preview-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:14px;}
@@ -98,7 +100,7 @@
   .topbar-actions{display:flex;gap:10px;}
   .btn-small{padding:9px 16px;font-size:13px;border-radius:6px;}
 
-  .stats-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--border);border-bottom:1px solid var(--border);}
+  .stats-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:1px;background:var(--border);border-bottom:1px solid var(--border);}
   .stat{background:var(--surface);padding:14px 16px;}
   .stat .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;}
   .stat .value{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;}
@@ -419,14 +421,25 @@ function opGroups(){
   return groups;
 }
 
+// Cada carro ahora reporta 3 numeros: los que SI pertenecen a esta solicitud,
+// los que llegaron ahi pero NO pertenecen (para poder ubicarlos fisicamente),
+// y el total real de rollos que hay en ese carro (para el conteo fisico).
 function carroGroups(){
   const groups = {};
-  state.carros.forEach(c=> groups[c] = 0);
+  state.carros.forEach(c=> groups[c] = {recibidos:0, fuera:0});
   state.lotes.forEach(l=>{
     if(l.estado==='recibido' && l.carro){
-      groups[l.carro] = (groups[l.carro]||0) + 1;
+      if(!groups[l.carro]) groups[l.carro] = {recibidos:0, fuera:0};
+      groups[l.carro].recibidos++;
     }
   });
+  state.invalidLog.forEach(x=>{
+    if(x.carro){
+      if(!groups[x.carro]) groups[x.carro] = {recibidos:0, fuera:0};
+      groups[x.carro].fuera++;
+    }
+  });
+  Object.values(groups).forEach(g => g.total = g.recibidos + g.fuera);
   return groups;
 }
 
@@ -478,7 +491,7 @@ function processScan(raw){
       return;
     }
     const origen = buscarLoteEnTodoElHistorico(loteNum, state.fecha);
-    state.invalidLog.push({lote:codigo, hora:new Date(), motivo: origen ? 'otra_fecha' : 'desconocido', origen});
+    state.invalidLog.push({lote:codigo, hora:new Date(), motivo: origen ? 'otra_fecha' : 'desconocido', origen, carro: state.carroActual});
     state.banner = origen
       ? {type:'err', msg:'LOTE DE OTRA SOLICITUD &middot; ' + fmtDate(origen.fecha), lote:codigo}
       : {type:'err', msg:'LOTE NO PERTENECE A NINGUNA SOLICITUD', lote:codigo};
@@ -892,6 +905,7 @@ function renderScan(){
   const recibidos = state.lotes.filter(l=>l.estado==='recibido').length;
   const pendientes = total - recibidos;
   const pct = total? Math.round(recibidos/total*100) : 0;
+  const totalLeidos = recibidos + state.invalidLog.length; // todo lo escaneado, pertenezca o no a esta solicitud
   const ultimo = state.scanLog[state.scanLog.length-1];
   const groups = opGroups();
   const carros = carroGroups();
@@ -919,7 +933,8 @@ function renderScan(){
 
     <div class="stats-strip">
       <div class="stat"><div class="label">Solicitados</div><div class="value">${total}</div></div>
-      <div class="stat ok"><div class="label">Recibidos</div><div class="value">${recibidos}</div></div>
+      <div class="stat ok"><div class="label">De esta solicitud</div><div class="value">${recibidos}</div></div>
+      <div class="stat accent"><div class="label">Total leídos</div><div class="value">${totalLeidos}</div></div>
       <div class="stat warn"><div class="label">Pendientes</div><div class="value">${pendientes}</div></div>
       <div class="stat accent"><div class="label">% Recibido</div><div class="value">${pct}%</div></div>
       <div class="stat"><div class="label">Inicio</div><div class="value" style="font-size:16px">${fmtTime(state.horaInicio)}</div></div>
@@ -957,9 +972,9 @@ function renderScan(){
             <div class="op-bar-track"><div class="op-bar-fill" style="width:${Math.round(g.recibidos/g.total*100)}%"></div></div>
           </div>
         `).join('')}
-        <h3>Recibidos por carro</h3>
-        ${Object.entries(carros).map(([c,n])=>`
-          <div class="carro-summary-row" data-carro-view="${c}"><span>${c}</span><span>${n}</span></div>
+        <h3>Rollos por carro</h3>
+        ${Object.entries(carros).map(([c,g])=>`
+          <div class="carro-summary-row" data-carro-view="${c}"><span>${c}</span><span>${g.total} ${g.fuera ? '<span class=\'carro-fuera-tag\'>('+g.fuera+' fuera)</span>' : ''}</span></div>
         `).join('')}
         ${state.invalidLog.length ? `
         <h3>Fuera de esta solicitud</h3>
@@ -1052,25 +1067,28 @@ function renderModal(){
 
   if(m.level === 'carro'){
     const rows = state.lotes.filter(l => l.carro === m.key);
+    const fuera = state.invalidLog.filter(x => x.carro === m.key);
+    const totalEnCarro = rows.length + fuera.length;
     const accionReset = rows.length ? (
       m.confirmar
         ? `<div class="reset-confirm">
-             <div class="reset-confirm-text">¿Reiniciar la lectura de ${m.key}? ${rows.length} lote(s) volverán a pendiente para escanearlos de nuevo.</div>
+             <div class="reset-confirm-text">¿Reiniciar la lectura de ${m.key}? ${rows.length} lote(s) de esta solicitud volverán a pendiente para escanearlos de nuevo. Los rollos fuera de solicitud no se ven afectados.</div>
              <div class="reset-confirm-actions">
                <button class="btn btn-ghost btn-small" id="cancelarResetCarroBtn">Cancelar</button>
                <button class="btn btn-warn btn-small" id="confirmarResetCarroBtn" data-carro="${m.key}">Sí, reiniciar</button>
              </div>
            </div>`
-        : `<button class="btn btn-warn btn-small" id="reiniciarCarroBtn" data-carro="${m.key}" style="margin-top:14px;width:100%">Reiniciar lectura de ${m.key} (${rows.length} lote(s) volverán a pendiente)</button>`
+        : `<button class="btn btn-warn btn-small" id="reiniciarCarroBtn" data-carro="${m.key}" style="margin-top:14px;width:100%">Reiniciar lectura de ${m.key} (${rows.length} lote(s) de esta solicitud volverán a pendiente)</button>`
     ) : '';
     return `
     <div class="modal-overlay" id="modalOverlay">
       <div class="modal-card">
         <div class="modal-head">
-          <h3>${m.key} &middot; ${rows.length} rollo(s)</h3>
+          <h3>${m.key} &middot; ${totalEnCarro} rollo(s)</h3>
           <button class="modal-close" id="closeModalBtn">Cerrar</button>
         </div>
         <div class="modal-body">
+          ${rows.length ? `
           <div class="table-scroll">
           <table>
             <thead><tr><th>Lote</th><th>Item OP</th><th>Color</th><th>Cant.</th><th>Observación</th></tr></thead>
@@ -1078,7 +1096,17 @@ function renderModal(){
               ${rows.map(l=>`<tr class="estado-recibido"><td>${l.lote}</td><td>${l.itemOp}</td><td style="font-family:Inter,sans-serif;font-size:12px;color:var(--muted)">${l.color}</td><td>${l.cantidad}</td><td>${l.obs? `<span class="badge badge-obs">${l.obs}</span>`:'—'}</td></tr>`).join('')}
             </tbody>
           </table>
-          </div>
+          </div>` : '<span class="empty-note">Ningún rollo de esta solicitud en este carro</span>'}
+          ${fuera.length ? `
+          <div class="modal-subheading">Fuera de esta solicitud, guardados aquí (${fuera.length})</div>
+          <div class="table-scroll">
+          <table>
+            <thead><tr><th>Lote</th><th>Pertenece a</th><th>Item OP</th><th>Tela / Color</th></tr></thead>
+            <tbody>
+              ${fuera.map(x=>`<tr class="estado-pendiente"><td>${x.lote}</td><td>${x.origen ? fmtDate(x.origen.fecha) : 'Desconocido'}</td><td>${x.origen ? x.origen.itemOp : '—'}</td><td style="font-family:Inter,sans-serif;font-size:12px;color:var(--muted)">${x.origen ? (x.origen.tipo+' / '+x.origen.color) : '—'}</td></tr>`).join('')}
+            </tbody>
+          </table>
+          </div>` : ''}
           ${accionReset}
         </div>
       </div>
@@ -1181,8 +1209,8 @@ function renderPreinforme(){
       </div>
 
       <div class="summary-section">
-        <h4>Recibidos por carro &middot; clic para ver los lotes</h4>
-        ${Object.entries(carros).filter(([c,n])=>n>0).length ? Object.entries(carros).map(([c,n])=> n>0 ? `<div class="carro-chip-row" data-carro-view="${c}"><span>${c}</span><span>${n} rollo(s) &rsaquo;</span></div>` : '').join('') : '<span class="empty-note">Aún no se ha registrado ningún carro</span>'}
+        <h4>Rollos por carro &middot; clic para ver el detalle</h4>
+        ${Object.entries(carros).filter(([c,g])=>g.total>0).length ? Object.entries(carros).map(([c,g])=> g.total>0 ? `<div class="carro-chip-row" data-carro-view="${c}"><span>${c}</span><span>${g.total} rollo(s) ${g.fuera ? '<span class=\'carro-fuera-tag\'>('+g.fuera+' fuera)</span>' : ''} &rsaquo;</span></div>` : '').join('') : '<span class="empty-note">Aún no se ha registrado ningún carro</span>'}
       </div>
 
       <div class="summary-section">
@@ -1247,8 +1275,8 @@ function renderSummary(){
       </div>
 
       <div class="summary-section">
-        <h4>Recibidos por carro</h4>
-        ${Object.entries(carros).filter(([c,n])=>n>0).length ? Object.entries(carros).map(([c,n])=> n>0 ? `<span class="lote-chip">${c}: ${n}</span>` : '').join('') : '<span class="empty-note">Aún no se ha registrado ningún carro</span>'}
+        <h4>Rollos por carro</h4>
+        ${Object.entries(carros).filter(([c,g])=>g.total>0).length ? Object.entries(carros).map(([c,g])=> g.total>0 ? `<span class="lote-chip">${c}: ${g.total}${g.fuera ? ' ('+g.fuera+' fuera)' : ''}</span>` : '').join('') : '<span class="empty-note">Aún no se ha registrado ningún carro</span>'}
       </div>
 
       <div class="summary-section">
