@@ -533,6 +533,9 @@ function reiniciarLecturaCarro(carroNombre){
       l.orden = null;
     }
   });
+  // tambien borra los rollos que no pertenecian a la solicitud pero habian
+  // quedado guardados en este carro, para que el carro quede realmente vacio
+  state.invalidLog = state.invalidLog.filter(x => x.carro !== carroNombre);
   state.obsModal = null;
   state.banner = {type:'warn', msg:'LECTURA REINICIADA', lote: carroNombre};
   render();
@@ -553,6 +556,7 @@ async function saveSessionToHistory(){
       color: x.origen ? x.origen.color : null,
       cantidad: x.origen ? x.origen.cantidad : null,
       obs: x.origen ? x.origen.obs : null,
+      carro: x.carro || null,
     }));
     const record = {
       fecha: state.fecha,
@@ -763,6 +767,7 @@ function exportarExcel(record){
       'Color': x.color || '',
       'Cantidad': x.cantidad || '',
       'Observación': x.obs || '',
+      'Carro': x.carro || '',
       'Hora de escaneo': x.hora ? fmtDateTime(x.hora) : '',
     }));
     const wsFuera = XLSX.utils.json_to_sheet(filasFuera);
@@ -791,6 +796,7 @@ function construirRecordDesdeSesionActiva(){
       color: x.origen ? x.origen.color : null,
       cantidad: x.origen ? x.origen.cantidad : null,
       obs: x.origen ? x.origen.obs : null,
+      carro: x.carro || null,
     })),
     carros: carroGroups(),
     lotesDetalle: state.lotes.map(l=>({
@@ -1069,16 +1075,16 @@ function renderModal(){
     const rows = state.lotes.filter(l => l.carro === m.key);
     const fuera = state.invalidLog.filter(x => x.carro === m.key);
     const totalEnCarro = rows.length + fuera.length;
-    const accionReset = rows.length ? (
+    const accionReset = totalEnCarro ? (
       m.confirmar
         ? `<div class="reset-confirm">
-             <div class="reset-confirm-text">¿Reiniciar la lectura de ${m.key}? ${rows.length} lote(s) de esta solicitud volverán a pendiente para escanearlos de nuevo. Los rollos fuera de solicitud no se ven afectados.</div>
+             <div class="reset-confirm-text">¿Reiniciar la lectura de ${m.key}? Se borrarán los ${totalEnCarro} registro(s) guardados aquí — ${rows.length} de esta solicitud (vuelven a pendiente) y ${fuera.length} fuera de solicitud (se eliminan del todo). Todos quedan listos para volver a escanearse.</div>
              <div class="reset-confirm-actions">
                <button class="btn btn-ghost btn-small" id="cancelarResetCarroBtn">Cancelar</button>
                <button class="btn btn-warn btn-small" id="confirmarResetCarroBtn" data-carro="${m.key}">Sí, reiniciar</button>
              </div>
            </div>`
-        : `<button class="btn btn-warn btn-small" id="reiniciarCarroBtn" data-carro="${m.key}" style="margin-top:14px;width:100%">Reiniciar lectura de ${m.key} (${rows.length} lote(s) de esta solicitud volverán a pendiente)</button>`
+        : `<button class="btn btn-warn btn-small" id="reiniciarCarroBtn" data-carro="${m.key}" style="margin-top:14px;width:100%">Reiniciar lectura de ${m.key} (${totalEnCarro} registro(s) se borrarán)</button>`
     ) : '';
     return `
     <div class="modal-overlay" id="modalOverlay">
